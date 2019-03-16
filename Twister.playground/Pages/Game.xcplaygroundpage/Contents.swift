@@ -2,12 +2,6 @@ import SpriteKit
 import PlaygroundSupport
 
 struct Settings {
-    enum Layer: CGFloat {
-        case background = 0
-        case player = 1
-        case block = 2
-    }
-    
     let windowSize: CGSize
     let blockSize: CGSize
     let dotRadius: CGFloat
@@ -26,6 +20,19 @@ struct Settings {
         
         colors = [.red, .blue, .green, .purple, .cyan, .magenta, .yellow]
     }
+}
+
+enum Layer: CGFloat {
+    case background = 0
+    case player = 1
+    case block = 2
+}
+
+enum PhysicsCategory {
+    static let none: UInt32 = 0
+    static let all: UInt32 = UInt32.max
+    static let dot: UInt32 = 0b1
+    static let block: UInt32 = 0b10
 }
 
 class GameView: SKView {
@@ -68,6 +75,9 @@ class GameScene: SKScene {
         addChild(player)
         player.animate()
         
+        physicsWorld.gravity = .zero
+        physicsWorld.contactDelegate = self
+        
         let add = SKAction.run(addBlock)
         let spawn = SKAction.run(spawnReserves)
         let wait = SKAction.wait(forDuration: GameView.settings.secondsPerRotation / 2)
@@ -107,11 +117,37 @@ class GameScene: SKScene {
     }
 }
 
+extension GameScene: SKPhysicsContactDelegate {
+    func didCollide(dot: Dot, block: Block) {
+        print("Collided")
+        pause()
+    }
+    
+    func didBegin(_ contact: SKPhysicsContact) {
+        var firstBody: SKPhysicsBody
+        var secondBody: SKPhysicsBody
+        if contact.bodyA.categoryBitMask < contact.bodyB.categoryBitMask {
+            firstBody = contact.bodyA
+            secondBody = contact.bodyB
+        } else {
+            firstBody = contact.bodyB
+            secondBody = contact.bodyA
+        }
+        
+        if ((firstBody.categoryBitMask & PhysicsCategory.dot != 0) &&
+            (secondBody.categoryBitMask & PhysicsCategory.block != 0)) {
+            if let dot = firstBody.node as? Dot, let block = secondBody.node as? Block {
+                didCollide(dot: dot, block: block)
+            }
+        }
+    }
+}
+
 class Background: SKSpriteNode {
     static let texture = SKTexture(imageNamed: "background")
     init(index: Int) {
         super.init(texture: Background.texture, color: .white, size: GameView.settings.windowSize)
-        zPosition = Settings.Layer.background.rawValue
+        zPosition = Layer.background.rawValue
         anchorPoint = .zero
         position = CGPoint(x: (size.width * CGFloat(index)) - CGFloat(index), y: 0)
     }
@@ -140,11 +176,11 @@ class Block: SKSpriteNode {
     }()
     
     init() {
-        let color = GameView.settings.colors.randomElement() ?? .red
-        super.init(texture: nil, color: color, size: GameView.settings.blockSize)
-        
         let windowSize = GameView.settings.windowSize
         let blockSize = GameView.settings.blockSize
+        let color = GameView.settings.colors.randomElement() ?? .red
+        super.init(texture: nil, color: color, size: blockSize)
+        
         let xPos: CGFloat = windowSize.width + (blockSize.width / 2)
         let yPos: CGFloat
         let useSecondaryHeight = Bool.random()
@@ -154,7 +190,14 @@ class Block: SKSpriteNode {
             yPos = windowSize.height - (2 * blockSize.height) + (blockSize.height / 2)
         }
         position = CGPoint(x: xPos, y: yPos)
-        zPosition = Settings.Layer.block.rawValue
+        zPosition = Layer.block.rawValue
+        
+        physicsBody = SKPhysicsBody(rectangleOf: blockSize)
+        physicsBody?.isDynamic = true
+        physicsBody?.categoryBitMask = PhysicsCategory.block
+        physicsBody?.contactTestBitMask = PhysicsCategory.dot
+        physicsBody?.collisionBitMask = PhysicsCategory.none
+        physicsBody?.usesPreciseCollisionDetection = true
     }
     
     func animate() {
@@ -225,11 +268,19 @@ class Dot: SKShapeNode {
     init(color: UIColor, position: CGPoint) {
         super.init()
         self.position = position
-        let diameter = GameView.settings.dotRadius * 2
+        let radius = GameView.settings.dotRadius
+        let diameter = radius * 2
         path = CGPath(ellipseIn: CGRect(origin: .zero, size: CGSize(width: diameter, height: diameter)), transform: nil)
         strokeColor = color
         fillColor = color
-        zPosition = Settings.Layer.player.rawValue
+        zPosition = Layer.player.rawValue
+        
+        physicsBody = SKPhysicsBody(circleOfRadius: radius)
+        physicsBody?.isDynamic = true
+        physicsBody?.categoryBitMask = PhysicsCategory.dot
+        physicsBody?.contactTestBitMask = PhysicsCategory.block
+        physicsBody?.collisionBitMask = PhysicsCategory.none
+        physicsBody?.usesPreciseCollisionDetection = true
     }
     
     required init?(coder aDecoder: NSCoder) {
