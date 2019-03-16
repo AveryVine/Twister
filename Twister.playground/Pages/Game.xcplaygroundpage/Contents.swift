@@ -16,13 +16,13 @@ struct Settings {
     let secondsPerRotation: Double
     let colors: [UIColor]
     
-    init(width: CGFloat = 300, height: CGFloat = 200, numberOfDots: Int = 2, secondsPerRotation: Double = 2) {
+    init(width: CGFloat = 300, height: CGFloat = 200, numberOfDots: Int = 2, secondsPerRotation: Double = 1.5) {
         self.windowSize = CGSize(width: width, height: height)
         self.dotRadius = height * 0.015
         self.dotDistanceFromAnchor = height * 0.25
         self.numberOfDots = numberOfDots
         self.secondsPerRotation = secondsPerRotation
-        self.blockSize = CGSize(width: self.dotRadius * 2, height: height / 6)
+        self.blockSize = CGSize(width: self.dotRadius * 2, height: height / 5)
         
         colors = [.red, .blue, .green, .purple, .cyan, .magenta, .yellow]
     }
@@ -78,10 +78,16 @@ class GameScene: SKScene {
         run(totalSequence)
     }
     
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        player.isClockwiseRotation = !player.isClockwiseRotation
+    }
+    
     func spawnReserves() {
         if reservedBlocks.children.count < 5 {
             DispatchQueue.global(qos: .background).async { [weak self] in
                 let block = Block()
+                let sequence = Block.movementSequence
+                block.run(sequence)
                 DispatchQueue.main.async { [weak self] in
                     guard let strongSelf = self else { return }
                     strongSelf.reservedBlocks.addChild(block)
@@ -93,8 +99,6 @@ class GameScene: SKScene {
     func addBlock() {
         if let block = reservedBlocks.children.first as? Block {
             block.move(toParent: self)
-            let sequence = Block.movementSequence
-            block.run(sequence)
         }
     }
     
@@ -202,11 +206,14 @@ class RotationLayer: SKShapeNode {
     }
     
     func animate() {
-        removeAllActions()
-        let angle = isClockwiseRotation ? -CGFloat.pi * 2 : CGFloat.pi * 2
-        let singleRotation = SKAction.rotate(byAngle: angle, duration: GameView.settings.secondsPerRotation)
-        let rotation = SKAction.repeatForever(singleRotation)
-        run(rotation)
+        if !hasActions() {
+            let clockwiseRotation = SKAction.repeatForever(SKAction.rotate(byAngle: -CGFloat.pi * 2, duration: GameView.settings.secondsPerRotation))
+            let counterclockwiseRotation = SKAction.repeatForever(SKAction.rotate(byAngle: CGFloat.pi * 2, duration: GameView.settings.secondsPerRotation))
+            run(clockwiseRotation, withKey: "clockwise")
+            run(counterclockwiseRotation, withKey: "counterclockwise")
+        }
+        action(forKey: "clockwise")?.speed = isClockwiseRotation ? 1 : 0
+        action(forKey: "counterclockwise")?.speed = isClockwiseRotation ? 0 : 1
     }
     
     required init?(coder aDecoder: NSCoder) {
