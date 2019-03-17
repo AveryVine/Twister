@@ -10,7 +10,7 @@ struct Settings {
     let secondsPerRotation: Double
     let colors: [UIColor]
     
-    init(width: CGFloat = 300, height: CGFloat = 200, numberOfDots: Int = 2, secondsPerRotation: Double = 1.5) {
+    init(width: CGFloat = 500, height: CGFloat = 300, numberOfDots: Int = 2, secondsPerRotation: Double = 1.5) {
         self.windowSize = CGSize(width: width, height: height)
         self.dotRadius = height * 0.015
         self.dotDistanceFromAnchor = height * 0.25
@@ -31,7 +31,6 @@ enum Layer: CGFloat {
 
 enum PhysicsCategory {
     static let none: UInt32 = 0
-    static let all: UInt32 = UInt32.max
     static let dot: UInt32 = 0b1
     static let block: UInt32 = 0b10
 }
@@ -111,7 +110,7 @@ class IntroScene: SKScene {
     }
     
     func prepareSubtitleLabel() {
-        subtitleLabel.text = "Tap anywhere to begin"
+        subtitleLabel.text = "Tap anywhere to begin."
         subtitleLabel.fontSize = 14
         subtitleLabel.horizontalAlignmentMode = .center
         subtitleLabel.position = {
@@ -388,10 +387,6 @@ class Block: SKSpriteNode {
             isHidden = true
         }
     }
-    
-    func applySlowMo() {
-        action(forKey: "blockMovement")?.speed = 0.25
-    }
 
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -429,7 +424,7 @@ class RotationLayer: SKShapeNode {
                                    width: distanceFromAnchor * 2,
                                    height: distanceFromAnchor * 2),
                       transform: nil)
-        position = CGPoint(x: GameView.settings.windowSize.width / 5, y: GameView.settings.windowSize.height / 2)
+        position = CGPoint(x: -GameView.settings.windowSize.width / 2, y: GameView.settings.windowSize.height / 2)
         strokeColor = .clear
         
         addChild(anchorDot)
@@ -444,6 +439,10 @@ class RotationLayer: SKShapeNode {
             let counterclockwiseRotation = SKAction.repeatForever(SKAction.rotate(byAngle: CGFloat.pi * 2, duration: GameView.settings.secondsPerRotation))
             run(clockwiseRotation, withKey: "clockwise")
             run(counterclockwiseRotation, withKey: "counterclockwise")
+            
+            let moveInFromLeft = SKAction.move(to: CGPoint(x: GameView.settings.windowSize.width / 5, y: GameView.settings.windowSize.height / 2), duration: 4)
+            moveInFromLeft.timingMode = .easeOut
+            run(moveInFromLeft)
         }
         if !didCollide {
             action(forKey: "clockwise")?.speed = isClockwiseRotation ? 1 : 0
