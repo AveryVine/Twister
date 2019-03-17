@@ -10,7 +10,7 @@ struct Settings {
     let secondsPerRotation: Double
     let colors: [UIColor]
     
-    init(width: CGFloat = 500, height: CGFloat = 300, numberOfDots: Int = 2, secondsPerRotation: Double = 1.5) {
+    init(width: CGFloat = 500, height: CGFloat = 300, numberOfDots: Int = 2, secondsPerRotation: Double = 1.75) {
         self.windowSize = CGSize(width: width, height: height)
         self.dotRadius = height * 0.015
         self.dotDistanceFromAnchor = height * 0.25
@@ -176,22 +176,59 @@ class IntroScene: SKScene {
 }
 
 class GameScene: SKScene {
-    let scoreSequence: SKAction = {
+    let textFadeSequence: SKAction = {
         let wait = SKAction.wait(forDuration: 1)
-        let showScore = SKAction.fadeAlpha(to: 1, duration: 1)
-        let hideScore = SKAction.fadeAlpha(to: 0, duration: 1)
-        let scaleScore = SKAction.scale(by: 1.3, duration: 3)
-        let scoreFadeSequence = SKAction.sequence([showScore, wait, hideScore])
-        let scoreGroup = SKAction.group([scoreFadeSequence, scaleScore])
-        let scoreSequence = SKAction.sequence([wait, scoreGroup])
-        return scoreSequence
+        let showText = SKAction.fadeAlpha(to: 1, duration: 1)
+        let hideText = SKAction.fadeAlpha(to: 0, duration: 1)
+        let scaleUpText = SKAction.scale(by: 1.3, duration: 3)
+        let scaleDownText = SKAction.scale(by: 10 / 12, duration: 0)
+        let textFadeSequence = SKAction.sequence([showText, wait, hideText])
+        let textActionGroup = SKAction.group([textFadeSequence, scaleUpText])
+        let textActionSequence = SKAction.sequence([textActionGroup, scaleDownText])
+        return textActionSequence
     }()
     
     let player: RotationLayer
     var reservedBlocks: SKNode
     var backgrounds: [Background]
+    let alertText: SKLabelNode
     let scoreText: SKLabelNode
-    var score: Int
+    var score: Int {
+        didSet {
+            if score % 20 == 0 {
+                extraSpeed += 0.1
+                alertText.text = "Score: \(score). Speeding up!"
+                alertText.run(textFadeSequence)
+            }
+        }
+    }
+    var extraSpeed: CGFloat {
+        didSet {
+            player.extraSpeed = extraSpeed
+            if player.isClockwiseRotation {
+                player.action(forKey: "clockwise")?.speed = 1 + extraSpeed
+            } else {
+                player.action(forKey: "counterclockwise")?.speed = 1 + extraSpeed
+            }
+            
+            for child in children {
+                if let block = child as? Block {
+                    block.action(forKey: "blockMovement")?.speed = 1 + extraSpeed
+                }
+            }
+            for child in reservedBlocks.children {
+                if let block = child as? Block {
+                    block.action(forKey: "blockMovement")?.speed = 1 + extraSpeed
+                }
+            }
+            
+            for background in backgrounds {
+                background.action(forKey: "backgroundMovement")?.speed = 1 + extraSpeed
+            }
+            
+            action(forKey: "blockGeneration")?.speed = 1 + extraSpeed
+        }
+    }
     
     override init() {
         player = RotationLayer()
@@ -204,6 +241,21 @@ class GameScene: SKScene {
             backgrounds.append(background)
             background.animate()
         }
+        
+        alertText = {
+            let alert = SKLabelNode(fontNamed: "Chalkboard SE")
+            alert.fontSize = 14
+            alert.horizontalAlignmentMode = .center
+            alert.position = {
+                let windowSize = GameView.settings.windowSize
+                let xPos = windowSize.width / 2
+                let yPos = windowSize.height / 3 * 2
+                return CGPoint(x: xPos, y: yPos)
+            }()
+            alert.zPosition = Layer.text.rawValue
+            alert.alpha = 0
+            return alert
+        }()
         
         scoreText = {
             let score = SKLabelNode(fontNamed: "Chalkboard SE")
@@ -221,6 +273,7 @@ class GameScene: SKScene {
             return score
         }()
         score = 0
+        extraSpeed = 0
         
         super.init(size: settings.windowSize)
         scaleMode = .fill
@@ -235,6 +288,7 @@ class GameScene: SKScene {
         }
         addChild(player)
         addChild(scoreText)
+        addChild(alertText)
     }
     
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -246,8 +300,10 @@ class GameScene: SKScene {
     func spawnReserves() {
         if reservedBlocks.children.count < 5 {
             DispatchQueue.global(qos: .background).async { [weak self] in
+                guard let strongSelf = self else { return }
                 let block = Block()
                 let sequence = Block.movementSequence
+                sequence.speed = 1 + strongSelf.extraSpeed
                 block.run(sequence, withKey: "blockMovement")
                 DispatchQueue.main.async { [weak self] in
                     guard let strongSelf = self else { return }
@@ -314,6 +370,9 @@ extension GameScene: SKPhysicsContactDelegate {
                 UserDefaults.standard.set(score, forKey: "highscore")
                 scoreText.text?.append(" - New High Score!")
             }
+            
+            let wait = SKAction.wait(forDuration: 1)
+            let scoreSequence = SKAction.sequence([wait, textFadeSequence])
             scoreText.run(scoreSequence, completion: {
                 self.run(SKAction.fadeOut(withDuration: 1), completion: {
                     let introScene = IntroScene()
@@ -396,7 +455,7 @@ class Block: SKSpriteNode {
 class RotationLayer: SKShapeNode {
     let anchorDot: Dot
     var outerDots: [Dot]
-    var rotationAngle: CGFloat = 0
+    var extraSpeed: CGFloat
     var isClockwiseRotation: Bool = true {
         didSet {
             animate()
@@ -408,6 +467,7 @@ class RotationLayer: SKShapeNode {
     override init() {
         let anchorDotPosition = CGPoint(x: -GameView.settings.dotRadius, y: -GameView.settings.dotRadius)
         anchorDot = Dot(color: .white, position: anchorDotPosition)
+        extraSpeed = 0
         
         outerDots = [Dot]()
         for index in 0 ..< GameView.settings.numberOfDots {
@@ -445,8 +505,8 @@ class RotationLayer: SKShapeNode {
             run(moveInFromLeft)
         }
         if !didCollide {
-            action(forKey: "clockwise")?.speed = isClockwiseRotation ? 1 : 0
-            action(forKey: "counterclockwise")?.speed = isClockwiseRotation ? 0 : 1
+            action(forKey: "clockwise")?.speed = isClockwiseRotation ? 1 + extraSpeed : 0
+            action(forKey: "counterclockwise")?.speed = isClockwiseRotation ? 0 : 1 + extraSpeed
         }
     }
     
