@@ -26,6 +26,7 @@ enum Layer: CGFloat {
     case background = 0
     case player = 1
     case block = 2
+    case text = 3
 }
 
 enum PhysicsCategory {
@@ -38,17 +39,136 @@ enum PhysicsCategory {
 class GameView: SKView {
     static var settings: Settings = Settings()
     
-    init(settings: Settings) {
-        GameView.settings = settings
+    init(settings: Settings?) {
+        if let settings = settings {
+            GameView.settings = settings
+        }
         
-        super.init(frame: CGRect(origin: .zero, size: settings.windowSize))
+        super.init(frame: CGRect(origin: .zero, size: GameView.settings.windowSize))
         showsFPS = true
         showsNodeCount = true
         ignoresSiblingOrder = true
         
-        let scene = GameScene()
-        scene.scaleMode = .fill
-        presentScene(scene)
+        presentScene(IntroScene())
+    }
+    
+    required init?(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
+class IntroScene: SKScene {
+    let gameScene: GameScene
+    let titleLabel: SKLabelNode
+    let subtitleLabel: SKLabelNode
+    let highScoreLabel: SKLabelNode
+    let resetButton: SKLabelNode
+    let background: Background
+    
+    override init() {
+        gameScene = GameScene()
+        titleLabel = SKLabelNode(fontNamed: "Academy Engraved LET")
+        subtitleLabel = SKLabelNode(fontNamed: "Chalkboard SE")
+        highScoreLabel = SKLabelNode(fontNamed: "Chalkboard SE")
+        resetButton = SKLabelNode(fontNamed: "Chalkboard SE")
+        background = Background()
+        super.init(size: GameView.settings.windowSize)
+        prepareTitleLabel()
+        prepareSubtitleLabel()
+        prepareHighScoreLabel()
+        prepareResetHighScoreButton()
+        scaleMode = .fill
+    }
+    
+    override func didMove(to view: SKView) {
+        addChild(background)
+        addChild(titleLabel)
+        addChild(subtitleLabel)
+        addChild(highScoreLabel)
+        addChild(resetButton)
+    }
+    
+    func prepareTitleLabel() {
+        titleLabel.text = "Twister"
+        titleLabel.fontSize = 42
+        titleLabel.horizontalAlignmentMode = .center
+        titleLabel.position = {
+            let windowSize = GameView.settings.windowSize
+            let xPos = windowSize.width / 2
+            let yPos = windowSize.height / 2
+            return CGPoint(x: xPos, y: yPos)
+        }()
+        titleLabel.zPosition = Layer.text.rawValue
+        
+        let wait = SKAction.wait(forDuration: 1)
+        let scaleUp = SKAction.scale(by: 1.1, duration: 2)
+        scaleUp.timingMode = .easeInEaseOut
+        let scaleDown = SKAction.scale(by: 10.0 / 11.0, duration: 2)
+        scaleDown.timingMode = .easeInEaseOut
+        let scaleSequence = SKAction.repeatForever(SKAction.sequence([scaleUp, scaleDown]))
+        let titleLabelSequence = SKAction.sequence([wait, scaleSequence])
+        titleLabel.run(titleLabelSequence)
+    }
+    
+    func prepareSubtitleLabel() {
+        subtitleLabel.text = "Tap anywhere to begin"
+        subtitleLabel.fontSize = 14
+        subtitleLabel.horizontalAlignmentMode = .center
+        subtitleLabel.position = {
+            let windowSize = GameView.settings.windowSize
+            let xPos = windowSize.width / 2
+            let yPos = windowSize.height / 3
+            return CGPoint(x: xPos, y: yPos)
+        }()
+        subtitleLabel.zPosition = Layer.text.rawValue
+    }
+    
+    func prepareHighScoreLabel() {
+        updateHighScoreText()
+        highScoreLabel.fontSize = 12
+        highScoreLabel.horizontalAlignmentMode = .center
+        highScoreLabel.position = {
+            let windowSize = GameView.settings.windowSize
+            let xPos = windowSize.width / 2
+            let yPos = windowSize.height / 4
+            return CGPoint(x: xPos, y: yPos)
+        }()
+        highScoreLabel.zPosition = Layer.text.rawValue
+    }
+    
+    func prepareResetHighScoreButton() {
+        resetButton.text = "Reset High Score?"
+        resetButton.color = .cyan
+        resetButton.fontSize = 10
+        resetButton.horizontalAlignmentMode = .left
+        resetButton.position = {
+            let xPos = 5
+            let yPos = 5
+            return CGPoint(x: xPos, y: yPos)
+        }()
+        resetButton.zPosition = Layer.text.rawValue
+    }
+    
+    func updateHighScoreText() {
+        let highScore = UserDefaults.standard.integer(forKey: "highscore")
+        highScoreLabel.text = "High Score: \(highScore)"
+    }
+    
+    func resetHighScore() {
+        UserDefaults.standard.set(0, forKey: "highscore")
+        updateHighScoreText()
+    }
+    
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else { return }
+        if resetButton.contains(touch.location(in: self)) {
+            resetHighScore()
+        } else {
+            let transition = SKTransition.crossFade(withDuration: 2)
+            transition.pausesOutgoingScene = false
+            transition.pausesIncomingScene = false
+            self.view?.presentScene(gameScene, transition: transition)
+        }
     }
     
     required init?(coder aDecoder: NSCoder) {
@@ -57,39 +177,71 @@ class GameView: SKView {
 }
 
 class GameScene: SKScene {
+    let scoreSequence: SKAction = {
+        let wait = SKAction.wait(forDuration: 1)
+        let showScore = SKAction.fadeAlpha(to: 1, duration: 1)
+        let hideScore = SKAction.fadeAlpha(to: 0, duration: 1)
+        let scaleScore = SKAction.scale(by: 1.3, duration: 3)
+        let scoreFadeSequence = SKAction.sequence([showScore, wait, hideScore])
+        let scoreGroup = SKAction.group([scoreFadeSequence, scaleScore])
+        let scoreSequence = SKAction.sequence([wait, scoreGroup])
+        return scoreSequence
+    }()
+    
     let player: RotationLayer
     var reservedBlocks: SKNode
+    var backgrounds: [Background]
+    let scoreText: SKLabelNode
+    var score: Int
     
     override init() {
         player = RotationLayer()
+        player.animate()
+        
         reservedBlocks = SKNode()
+        backgrounds = [Background]()
+        for index in 0 ... 1 {
+            let background = Background(index: index)
+            backgrounds.append(background)
+            background.animate()
+        }
+        
+        scoreText = {
+            let score = SKLabelNode(fontNamed: "Chalkboard SE")
+            score.text = "Blocks survived: "
+            score.fontSize = 14
+            score.horizontalAlignmentMode = .center
+            score.position = {
+                let windowSize = GameView.settings.windowSize
+                let xPos = windowSize.width / 2
+                let yPos = (windowSize.height / 2) - (score.frame.height / 2)
+                return CGPoint(x: xPos, y: yPos)
+            }()
+            score.zPosition = Layer.text.rawValue
+            score.alpha = 0
+            return score
+        }()
+        score = 0
+        
         super.init(size: settings.windowSize)
+        scaleMode = .fill
+        physicsWorld.gravity = .zero
+        physicsWorld.contactDelegate = self
+        animateBlockGeneration()
     }
     
     override func didMove(to view: SKView) {
-        for index in 0 ... 1 {
-            let background = Background(index: index)
+        for background in backgrounds {
             addChild(background)
-            background.animate()
         }
         addChild(player)
-        player.animate()
-        
-        physicsWorld.gravity = .zero
-        physicsWorld.contactDelegate = self
-        
-        let add = SKAction.run(addBlock)
-        let spawn = SKAction.run(spawnReserves)
-        let wait = SKAction.wait(forDuration: GameView.settings.secondsPerRotation / 2)
-        let generateSequence = SKAction.sequence([add, spawn, wait])
-        let generateLoop = SKAction.repeatForever(generateSequence)
-        let initialWait = SKAction.wait(forDuration: GameView.settings.secondsPerRotation * 2.15)
-        let totalSequence = SKAction.sequence([initialWait, generateLoop])
-        run(totalSequence)
+        addChild(scoreText)
     }
     
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        player.isClockwiseRotation = !player.isClockwiseRotation
+        if !player.didCollide {
+            player.isClockwiseRotation = !player.isClockwiseRotation
+        }
     }
     
     func spawnReserves() {
@@ -97,7 +249,7 @@ class GameScene: SKScene {
             DispatchQueue.global(qos: .background).async { [weak self] in
                 let block = Block()
                 let sequence = Block.movementSequence
-                block.run(sequence)
+                block.run(sequence, withKey: "blockMovement")
                 DispatchQueue.main.async { [weak self] in
                     guard let strongSelf = self else { return }
                     strongSelf.reservedBlocks.addChild(block)
@@ -112,40 +264,70 @@ class GameScene: SKScene {
         }
     }
     
+    func animateBlockGeneration() {
+        let add = SKAction.run(addBlock)
+        let spawn = SKAction.run(spawnReserves)
+        let wait = SKAction.wait(forDuration: GameView.settings.secondsPerRotation / 2)
+        let generateSequence = SKAction.sequence([add, spawn, wait])
+        let generateLoop = SKAction.repeatForever(generateSequence)
+        let initialWait = SKAction.wait(forDuration: GameView.settings.secondsPerRotation * 2.15)
+        let totalSequence = SKAction.sequence([initialWait, generateLoop])
+        run(totalSequence, withKey: "blockGeneration")
+    }
+    
+    override func update(_ currentTime: TimeInterval) {
+        for child in children {
+            if let block = child as? Block {
+                if block.position.x < GameView.settings.windowSize.width / 5 - player.distanceFromAnchor {
+                    if !block.survived {
+                        block.survived = true
+                        score += 1
+                    }
+                }
+            }
+        }
+    }
+    
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 }
 
 extension GameScene: SKPhysicsContactDelegate {
-    func didCollide(dot: Dot, block: Block) {
-        print("Collided")
-        pause()
-    }
-    
     func didBegin(_ contact: SKPhysicsContact) {
-        var firstBody: SKPhysicsBody
-        var secondBody: SKPhysicsBody
-        if contact.bodyA.categoryBitMask < contact.bodyB.categoryBitMask {
-            firstBody = contact.bodyA
-            secondBody = contact.bodyB
-        } else {
-            firstBody = contact.bodyB
-            secondBody = contact.bodyA
-        }
-        
-        if ((firstBody.categoryBitMask & PhysicsCategory.dot != 0) &&
-            (secondBody.categoryBitMask & PhysicsCategory.block != 0)) {
-            if let dot = firstBody.node as? Dot, let block = secondBody.node as? Block {
-                didCollide(dot: dot, block: block)
+        if !player.didCollide {
+            physicsWorld.contactDelegate = nil
+            player.didCollide = true
+            player.action(forKey: player.isClockwiseRotation ? "clockwise" : "counterclockwise")?.speed = 0.25
+            for background in backgrounds {
+                background.action(forKey: "backgroundMovement")?.speed = 0.25
             }
+            for child in children {
+                if let block = child as? Block {
+                    block.action(forKey: "blockMovement")?.speed = 0.25
+                }
+            }
+            action(forKey: "blockGeneration")?.speed = 0
+            
+            scoreText.text?.append(String(score))
+            let currentHighScore = UserDefaults.standard.integer(forKey: "highscore")
+            if score > currentHighScore {
+                UserDefaults.standard.set(score, forKey: "highscore")
+                scoreText.text?.append(" - New High Score!")
+            }
+            scoreText.run(scoreSequence, completion: {
+                self.run(SKAction.fadeOut(withDuration: 1), completion: {
+                    let introScene = IntroScene()
+                    self.view?.presentScene(introScene)
+                })
+            })
         }
     }
 }
 
 class Background: SKSpriteNode {
     static let texture = SKTexture(imageNamed: "background")
-    init(index: Int) {
+    init(index: Int = 0) {
         super.init(texture: Background.texture, color: .white, size: GameView.settings.windowSize)
         zPosition = Layer.background.rawValue
         anchorPoint = .zero
@@ -160,7 +342,7 @@ class Background: SKSpriteNode {
         let moveLeft = SKAction.moveBy(x: -size.width, y: 0, duration: GameView.settings.secondsPerRotation * 2)
         let moveReset = SKAction.moveBy(x: size.width, y: 0, duration: 0)
         let moveLoop = SKAction.repeatForever(SKAction.sequence([moveLeft, moveReset]))
-        run(moveLoop)
+        run(moveLoop, withKey: "backgroundMovement")
     }
 }
 
@@ -174,34 +356,41 @@ class Block: SKSpriteNode {
         let removeBlock = SKAction.removeFromParent()
         return SKAction.sequence([moveLeft, removeBlock])
     }()
+    static var hideBlocks: Bool = false
+    var survived: Bool
     
     init() {
         let windowSize = GameView.settings.windowSize
         let blockSize = GameView.settings.blockSize
         let color = GameView.settings.colors.randomElement() ?? .red
+        survived = false
         super.init(texture: nil, color: color, size: blockSize)
         
-        let xPos: CGFloat = windowSize.width + (blockSize.width / 2)
-        let yPos: CGFloat
-        let useSecondaryHeight = Bool.random()
-        if !useSecondaryHeight {
-            yPos = blockSize.height * 1.5
+        if !Block.hideBlocks {
+            let xPos: CGFloat = windowSize.width + (blockSize.width / 2)
+            let yPos: CGFloat
+            let useSecondaryHeight = Bool.random()
+            if !useSecondaryHeight {
+                yPos = blockSize.height * 1.5
+            } else {
+                yPos = windowSize.height - (2 * blockSize.height) + (blockSize.height / 2)
+            }
+            position = CGPoint(x: xPos, y: yPos)
+            zPosition = Layer.block.rawValue
+            
+            physicsBody = SKPhysicsBody(rectangleOf: blockSize)
+            physicsBody?.isDynamic = true
+            physicsBody?.categoryBitMask = PhysicsCategory.block
+            physicsBody?.contactTestBitMask = PhysicsCategory.dot
+            physicsBody?.collisionBitMask = PhysicsCategory.none
+            physicsBody?.usesPreciseCollisionDetection = true
         } else {
-            yPos = windowSize.height - (2 * blockSize.height) + (blockSize.height / 2)
+            isHidden = true
         }
-        position = CGPoint(x: xPos, y: yPos)
-        zPosition = Layer.block.rawValue
-        
-        physicsBody = SKPhysicsBody(rectangleOf: blockSize)
-        physicsBody?.isDynamic = true
-        physicsBody?.categoryBitMask = PhysicsCategory.block
-        physicsBody?.contactTestBitMask = PhysicsCategory.dot
-        physicsBody?.collisionBitMask = PhysicsCategory.none
-        physicsBody?.usesPreciseCollisionDetection = true
     }
     
-    func animate() {
-        
+    func applySlowMo() {
+        action(forKey: "blockMovement")?.speed = 0.25
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -218,6 +407,7 @@ class RotationLayer: SKShapeNode {
             animate()
         }
     }
+    var didCollide: Bool = false
     var distanceFromAnchor: CGFloat = GameView.settings.dotDistanceFromAnchor
     
     override init() {
@@ -255,8 +445,10 @@ class RotationLayer: SKShapeNode {
             run(clockwiseRotation, withKey: "clockwise")
             run(counterclockwiseRotation, withKey: "counterclockwise")
         }
-        action(forKey: "clockwise")?.speed = isClockwiseRotation ? 1 : 0
-        action(forKey: "counterclockwise")?.speed = isClockwiseRotation ? 0 : 1
+        if !didCollide {
+            action(forKey: "clockwise")?.speed = isClockwiseRotation ? 1 : 0
+            action(forKey: "counterclockwise")?.speed = isClockwiseRotation ? 0 : 1
+        }
     }
     
     required init?(coder aDecoder: NSCoder) {
