@@ -1,5 +1,6 @@
 import SpriteKit
 import PlaygroundSupport
+import AVFoundation
 
 struct Settings {
     let windowSize: CGSize
@@ -37,6 +38,7 @@ enum PhysicsCategory {
 
 class GameView: SKView {
     static var settings: Settings = Settings()
+    var music: AVAudioPlayer?
     
     init(settings: Settings?) {
         if let settings = settings {
@@ -49,6 +51,14 @@ class GameView: SKView {
         ignoresSiblingOrder = true
         
         presentScene(IntroScene())
+        
+        if let musicUrl = Bundle.main.url(forResource: "music", withExtension: "mp3") {
+            if let audioPlayer = try? AVAudioPlayer(contentsOf: musicUrl) {
+                music = audioPlayer
+                music?.numberOfLoops = -1
+                music?.play()
+            }
+        }
     }
     
     required init?(coder aDecoder: NSCoder) {
