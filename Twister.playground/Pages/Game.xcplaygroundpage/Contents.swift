@@ -39,6 +39,7 @@ enum PhysicsCategory {
 class GameView: SKView {
     static var settings: Settings = Settings()
     var music: AVAudioPlayer?
+    var musicMuted: AVAudioPlayer?
     
     init(settings: Settings?) {
         if let settings = settings {
@@ -50,15 +51,32 @@ class GameView: SKView {
         showsNodeCount = true
         ignoresSiblingOrder = true
         
-        presentScene(IntroScene())
-        
-        if let musicUrl = Bundle.main.url(forResource: "music", withExtension: "mp3") {
+        if let musicUrl = Bundle.main.url(forResource: "twister", withExtension: "aiff") {
             if let audioPlayer = try? AVAudioPlayer(contentsOf: musicUrl) {
                 music = audioPlayer
                 music?.numberOfLoops = -1
+                music?.volume = 0
+                music?.prepareToPlay()
                 music?.play()
             }
         }
+        
+        if let mutedMusicUrl = Bundle.main.url(forResource: "twister_muted", withExtension: "aiff") {
+            if let audioPlayer = try? AVAudioPlayer(contentsOf: mutedMusicUrl) {
+                musicMuted = audioPlayer
+                musicMuted?.numberOfLoops = -1
+                musicMuted?.volume = 0
+                musicMuted?.prepareToPlay()
+                musicMuted?.play()
+            }
+        }
+        
+        presentScene(IntroScene())
+    }
+    
+    func toggleMusic(muted: Bool) {
+        music?.setVolume(muted ? 0 : 100, fadeDuration: 2)
+        musicMuted?.setVolume(muted ? 100 : 0, fadeDuration: 2)
     }
     
     required init?(coder aDecoder: NSCoder) {
@@ -90,6 +108,10 @@ class IntroScene: SKScene {
     }
     
     override func didMove(to view: SKView) {
+        if let view = view as? GameView {
+            view.toggleMusic(muted: true)
+        }
+        
         addChild(background)
         addChild(titleLabel)
         addChild(subtitleLabel)
@@ -293,6 +315,10 @@ class GameScene: SKScene {
     }
     
     override func didMove(to view: SKView) {
+        if let view = view as? GameView {
+            view.toggleMusic(muted: false)
+        }
+        
         for background in backgrounds {
             addChild(background)
         }
