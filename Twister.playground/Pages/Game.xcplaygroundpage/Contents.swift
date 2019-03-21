@@ -36,10 +36,6 @@ enum PhysicsCategory {
     static let block: UInt32 = 0b10
 }
 
-protocol MusicDelegate: AnyObject {
-    func toggleMusic(muted: Bool)
-}
-
 class GameView: SKView {
     static var settings: Settings = Settings()
     var music: AVAudioPlayer?
@@ -52,8 +48,8 @@ class GameView: SKView {
         
         super.init(frame: CGRect(origin: .zero, size: GameView.settings.windowSize))
         showsFPS = true
-        showsNodeCount = true
-        showsPhysics = true
+        showsNodeCount = false
+        showsPhysics = false
         ignoresSiblingOrder = true
         
         if let musicUrl = Bundle.main.url(forResource: "twister", withExtension: "aiff") {
@@ -62,6 +58,7 @@ class GameView: SKView {
                 music?.numberOfLoops = -1
                 music?.volume = 0
                 music?.prepareToPlay()
+                music?.play()
             }
         }
         
@@ -71,33 +68,21 @@ class GameView: SKView {
                 musicMuted?.numberOfLoops = -1
                 musicMuted?.volume = 0
                 musicMuted?.prepareToPlay()
+                musicMuted?.play()
             }
         }
         
         let intro = IntroScene()
-        intro.musicDelegate = self
         presentScene(intro)
+    }
+    
+    func toggleMusic(muted: Bool) {
+        music?.setVolume(muted ? 0 : 5, fadeDuration: 2)
+        musicMuted?.setVolume(muted ? 5 : 0, fadeDuration: 2)
     }
     
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-}
-
-extension GameView: MusicDelegate {
-    func toggleMusic(muted: Bool) {
-        if let music = music {
-            if !music.isPlaying {
-                music.play()
-            }
-            music.setVolume(muted ? 0 : 100, fadeDuration: 2)
-        }
-        if let musicMuted = musicMuted {
-            if !musicMuted.isPlaying {
-                musicMuted.play()
-            }
-            musicMuted.setVolume(muted ? 100 : 0, fadeDuration: 2)
-        }
     }
 }
 
@@ -108,8 +93,6 @@ class IntroScene: SKScene {
     let highScoreLabel: SKLabelNode
     let resetButton: SKLabelNode
     let background: Background
-    
-    weak var musicDelegate: MusicDelegate?
     
     override init() {
         gameScene = GameScene()
@@ -123,11 +106,13 @@ class IntroScene: SKScene {
         prepareSubtitleLabel()
         prepareHighScoreLabel()
         prepareResetHighScoreButton()
-        scaleMode = .fill
+        scaleMode = .aspectFit
     }
     
     override func didMove(to view: SKView) {
-        musicDelegate?.toggleMusic(muted: true)
+        if let gameView = self.view as? GameView {
+            gameView.toggleMusic(muted: true)
+        }
         
         addChild(background)
         addChild(titleLabel)
@@ -148,14 +133,12 @@ class IntroScene: SKScene {
         }()
         titleLabel.zPosition = Layer.text.rawValue
         
-        let wait = SKAction.wait(forDuration: 1)
         let scaleUp = SKAction.scale(by: 1.1, duration: 2)
         scaleUp.timingMode = .easeInEaseOut
         let scaleDown = SKAction.scale(by: 10.0 / 11.0, duration: 2)
         scaleDown.timingMode = .easeInEaseOut
         let scaleSequence = SKAction.repeatForever(SKAction.sequence([scaleUp, scaleDown]))
-        let titleLabelSequence = SKAction.sequence([wait, scaleSequence])
-        titleLabel.run(titleLabelSequence)
+        titleLabel.run(scaleSequence)
     }
     
     func prepareSubtitleLabel() {
@@ -215,7 +198,6 @@ class IntroScene: SKScene {
             let transition = SKTransition.crossFade(withDuration: 2)
             transition.pausesOutgoingScene = false
             transition.pausesIncomingScene = false
-            gameScene.musicDelegate = musicDelegate
             self.view?.presentScene(gameScene, transition: transition)
         }
     }
@@ -228,8 +210,8 @@ class IntroScene: SKScene {
 class GameScene: SKScene {
     let textFadeSequence: SKAction = {
         let wait = SKAction.wait(forDuration: 1)
-        let showText = SKAction.fadeAlpha(to: 1, duration: 1)
-        let hideText = SKAction.fadeAlpha(to: 0, duration: 1)
+        let showText = SKAction.fadeAlpha(to: 1, duration: 0.75)
+        let hideText = SKAction.fadeAlpha(to: 0, duration: 0.75)
         let scaleUpText = SKAction.scale(by: 1.3, duration: 3)
         let scaleDownText = SKAction.scale(by: 10 / 12, duration: 0)
         let textFadeSequence = SKAction.sequence([showText, wait, hideText])
@@ -237,6 +219,8 @@ class GameScene: SKScene {
         let textActionSequence = SKAction.sequence([textActionGroup, scaleDownText])
         return textActionSequence
     }()
+    let fadeOut: SKAction = SKAction.fadeOut(withDuration: 0.5)
+    let wait = SKAction.wait(forDuration: 0.5)
     
     let player: RotationLayer
     var reservedBlocks: SKNode
@@ -262,13 +246,13 @@ class GameScene: SKScene {
             }
             
             for child in children {
-                if let block = child as? Block {
-                    block.action(forKey: "blockMovement")?.speed = 1 + extraSpeed
+                if child.name == "block" {
+                    child.action(forKey: "blockMovement")?.speed = 1 + extraSpeed
                 }
             }
             for child in reservedBlocks.children {
-                if let block = child as? Block {
-                    block.action(forKey: "blockMovement")?.speed = 1 + extraSpeed
+                if child.name == "block" {
+                    child.action(forKey: "blockMovement")?.speed = 1 + extraSpeed
                 }
             }
             
@@ -279,10 +263,11 @@ class GameScene: SKScene {
             action(forKey: "blockGeneration")?.speed = 1 + extraSpeed
         }
     }
-    
-    weak var musicDelegate: MusicDelegate?
+    var gameActive: Bool
     
     override init() {
+        gameActive = false
+        
         player = RotationLayer()
         player.animate()
         
@@ -311,7 +296,7 @@ class GameScene: SKScene {
         
         scoreText = {
             let score = SKLabelNode(fontNamed: "Chalkboard SE")
-            score.text = "Blocks survived: "
+            score.text = "Blocks cleared: "
             score.fontSize = 14
             score.horizontalAlignmentMode = .center
             score.position = {
@@ -328,14 +313,17 @@ class GameScene: SKScene {
         extraSpeed = 0
         
         super.init(size: settings.windowSize)
-        scaleMode = .fill
+        scaleMode = .aspectFit
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
+        backgroundColor = UIColor(red: 3.0 / 255.0, green: 16.0 / 255.0, blue: 68.0 / 255.0, alpha: 1)
         animateBlockGeneration()
     }
     
     override func didMove(to view: SKView) {
-        musicDelegate?.toggleMusic(muted: false)
+        if let gameView = self.view as? GameView {
+            gameView.toggleMusic(muted: false)
+        }
         
         for background in backgrounds {
             addChild(background)
@@ -343,39 +331,38 @@ class GameScene: SKScene {
         addChild(player)
         addChild(scoreText)
         addChild(alertText)
+        gameActive = true
     }
     
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if !player.didCollide {
+        if gameActive {
             player.isClockwiseRotation = !player.isClockwiseRotation
+            player.action(forKey: "clockwise")?.speed = player.isClockwiseRotation ? 1 + extraSpeed : 0
+            player.action(forKey: "counterclockwise")?.speed = player.isClockwiseRotation ? 0 : 1 + extraSpeed
         }
     }
     
-    func spawnReserves() {
-        if reservedBlocks.children.count < 5 {
-            DispatchQueue.global(qos: .background).async { [weak self] in
+    func spawnBlock() {
+        DispatchQueue.global(qos: .background).async { [weak self] in
+            guard let strongSelf = self else { return }
+            let block = Block()
+            let sequence = Block.movementSequence
+            sequence.speed = 1 + strongSelf.extraSpeed
+            block.run(sequence, withKey: "blockMovement")
+            DispatchQueue.main.async { [weak self] in
                 guard let strongSelf = self else { return }
-                let block = Block()
-                let sequence = Block.movementSequence
-                sequence.speed = 1 + strongSelf.extraSpeed
-                block.run(sequence, withKey: "blockMovement")
-                DispatchQueue.main.async { [weak self] in
-                    guard let strongSelf = self else { return }
-                    strongSelf.reservedBlocks.addChild(block)
-                }
+                strongSelf.reservedBlocks.addChild(block)
             }
         }
     }
     
     func addBlock() {
-        if let block = reservedBlocks.children.first as? Block {
-            block.move(toParent: self)
-        }
+        reservedBlocks.children.first?.move(toParent: self)
     }
     
     func animateBlockGeneration() {
         let add = SKAction.run(addBlock)
-        let spawn = SKAction.run(spawnReserves)
+        let spawn = SKAction.run(spawnBlock)
         let wait = SKAction.wait(forDuration: GameView.settings.secondsPerRotation / 2)
         let generateSequence = SKAction.sequence([add, spawn, wait])
         let generateLoop = SKAction.repeatForever(generateSequence)
@@ -385,13 +372,13 @@ class GameScene: SKScene {
     }
     
     override func update(_ currentTime: TimeInterval) {
-        for child in children {
-            if let block = child as? Block {
-                if block.position.x < GameView.settings.windowSize.width / 5 - player.distanceFromAnchor {
-                    if !block.survived {
-                        block.survived = true
-                        score += 1
-                    }
+        if gameActive {
+            for child in children {
+                if let block = child as? Block,
+                    block.position.x < GameView.settings.windowSize.width / 5 - player.distanceFromAnchor,
+                    !block.cleared {
+                    block.cleared = true
+                    score += 1
                 }
             }
         }
@@ -404,9 +391,8 @@ class GameScene: SKScene {
 
 extension GameScene: SKPhysicsContactDelegate {
     func didBegin(_ contact: SKPhysicsContact) {
-        if !player.didCollide {
-            physicsWorld.contactDelegate = nil
-            player.didCollide = true
+        if gameActive {
+            gameActive = false
             player.action(forKey: player.isClockwiseRotation ? "clockwise" : "counterclockwise")?.speed = 0.25
             for background in backgrounds {
                 background.action(forKey: "backgroundMovement")?.speed = 0.25
@@ -425,13 +411,15 @@ extension GameScene: SKPhysicsContactDelegate {
                 scoreText.text?.append(" - New High Score!")
             }
             
-            let wait = SKAction.wait(forDuration: 1)
             let scoreSequence = SKAction.sequence([wait, textFadeSequence])
             scoreText.run(scoreSequence, completion: {
-                self.run(SKAction.fadeOut(withDuration: 1), completion: {
-                    let intro = IntroScene()
-                    intro.musicDelegate = self.musicDelegate
-                    self.view?.presentScene(intro)
+                self.run(self.fadeOut, completion: {
+                    DispatchQueue.global(qos: .default).async {
+                        let intro = IntroScene()
+                        DispatchQueue.main.async {
+                            self.view?.presentScene(intro)
+                        }
+                    }
                 })
             })
         }
@@ -439,7 +427,8 @@ extension GameScene: SKPhysicsContactDelegate {
 }
 
 class Background: SKSpriteNode {
-    static let texture = SKTexture(imageNamed: "background")
+    static let texture = SKTexture(imageNamed: "blue_background")
+    
     init(index: Int = 0) {
         super.init(texture: Background.texture, color: .white, size: GameView.settings.windowSize)
         zPosition = Layer.background.rawValue
@@ -453,8 +442,10 @@ class Background: SKSpriteNode {
     
     func animate() {
         let moveLeft = SKAction.moveBy(x: -size.width, y: 0, duration: GameView.settings.secondsPerRotation * 2)
+        let fadeOut = SKAction.fadeOut(withDuration: 0)
         let moveReset = SKAction.moveBy(x: size.width, y: 0, duration: 0)
-        let moveLoop = SKAction.repeatForever(SKAction.sequence([moveLeft, moveReset]))
+        let fadeIn = SKAction.fadeIn(withDuration: 0)
+        let moveLoop = SKAction.repeatForever(SKAction.sequence([moveLeft, fadeOut, moveReset, fadeIn]))
         run(moveLoop, withKey: "backgroundMovement")
     }
 }
@@ -469,16 +460,16 @@ class Block: SKSpriteNode {
         let removeBlock = SKAction.removeFromParent()
         return SKAction.sequence([moveLeft, removeBlock])
     }()
-    var survived: Bool
+    var cleared: Bool
     
     init() {
         let windowSize = GameView.settings.windowSize
         let blockSize = GameView.settings.blockSize
         let color = GameView.settings.colors.randomElement() ?? .red
-        survived = false
+        cleared = false
         super.init(texture: nil, color: color, size: blockSize)
         
-        let xPos: CGFloat = windowSize.width + (blockSize.width / 2)
+        let xPos: CGFloat = windowSize.width
         let yPos: CGFloat
         let useSecondaryHeight = Bool.random()
         if !useSecondaryHeight {
@@ -488,6 +479,7 @@ class Block: SKSpriteNode {
         }
         position = CGPoint(x: xPos, y: yPos)
         zPosition = Layer.block.rawValue
+        name = "block"
         
         physicsBody = SKPhysicsBody(rectangleOf: blockSize)
         physicsBody?.isDynamic = true
@@ -506,12 +498,7 @@ class RotationLayer: SKShapeNode {
     let anchorDot: Dot
     var outerDots: [Dot]
     var extraSpeed: CGFloat
-    var isClockwiseRotation: Bool = true {
-        didSet {
-            animate()
-        }
-    }
-    var didCollide: Bool = false
+    var isClockwiseRotation: Bool = true
     var distanceFromAnchor: CGFloat = GameView.settings.dotDistanceFromAnchor
     
     override init() {
@@ -544,20 +531,16 @@ class RotationLayer: SKShapeNode {
     }
     
     func animate() {
-        if !hasActions() {
-            let clockwiseRotation = SKAction.repeatForever(SKAction.rotate(byAngle: -CGFloat.pi * 2, duration: GameView.settings.secondsPerRotation))
-            let counterclockwiseRotation = SKAction.repeatForever(SKAction.rotate(byAngle: CGFloat.pi * 2, duration: GameView.settings.secondsPerRotation))
-            run(clockwiseRotation, withKey: "clockwise")
-            run(counterclockwiseRotation, withKey: "counterclockwise")
-            
-            let moveInFromLeft = SKAction.move(to: CGPoint(x: GameView.settings.windowSize.width / 5, y: GameView.settings.windowSize.height / 2), duration: 4)
-            moveInFromLeft.timingMode = .easeOut
-            run(moveInFromLeft)
-        }
-        if !didCollide {
-            action(forKey: "clockwise")?.speed = isClockwiseRotation ? 1 + extraSpeed : 0
-            action(forKey: "counterclockwise")?.speed = isClockwiseRotation ? 0 : 1 + extraSpeed
-        }
+        let clockwiseRotation = SKAction.repeatForever(SKAction.rotate(byAngle: -CGFloat.pi * 2, duration: GameView.settings.secondsPerRotation))
+        let counterclockwiseRotation = SKAction.repeatForever(SKAction.rotate(byAngle: CGFloat.pi * 2, duration: GameView.settings.secondsPerRotation))
+        run(clockwiseRotation, withKey: "clockwise")
+        run(counterclockwiseRotation, withKey: "counterclockwise")
+        
+        let moveInFromLeft = SKAction.move(to: CGPoint(x: GameView.settings.windowSize.width / 5, y: GameView.settings.windowSize.height / 2), duration: 4)
+        moveInFromLeft.timingMode = .easeOut
+        run(moveInFromLeft)
+        
+        action(forKey: "counterclockwise")?.speed = 0
     }
     
     required init?(coder aDecoder: NSCoder) {
