@@ -36,6 +36,10 @@ enum PhysicsCategory {
     static let block: UInt32 = 0b10
 }
 
+protocol MusicDelegate: AnyObject {
+    func toggleMusic(muted: Bool)
+}
+
 class GameView: SKView {
     static var settings: Settings = Settings()
     var music: AVAudioPlayer?
@@ -49,6 +53,7 @@ class GameView: SKView {
         super.init(frame: CGRect(origin: .zero, size: GameView.settings.windowSize))
         showsFPS = true
         showsNodeCount = true
+        showsPhysics = true
         ignoresSiblingOrder = true
         
         if let musicUrl = Bundle.main.url(forResource: "twister", withExtension: "aiff") {
@@ -57,7 +62,6 @@ class GameView: SKView {
                 music?.numberOfLoops = -1
                 music?.volume = 0
                 music?.prepareToPlay()
-                music?.play()
             }
         }
         
@@ -67,20 +71,33 @@ class GameView: SKView {
                 musicMuted?.numberOfLoops = -1
                 musicMuted?.volume = 0
                 musicMuted?.prepareToPlay()
-                musicMuted?.play()
             }
         }
         
-        presentScene(IntroScene())
-    }
-    
-    func toggleMusic(muted: Bool) {
-        music?.setVolume(muted ? 0 : 100, fadeDuration: 2)
-        musicMuted?.setVolume(muted ? 100 : 0, fadeDuration: 2)
+        let intro = IntroScene()
+        intro.musicDelegate = self
+        presentScene(intro)
     }
     
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+}
+
+extension GameView: MusicDelegate {
+    func toggleMusic(muted: Bool) {
+        if let music = music {
+            if !music.isPlaying {
+                music.play()
+            }
+            music.setVolume(muted ? 0 : 100, fadeDuration: 2)
+        }
+        if let musicMuted = musicMuted {
+            if !musicMuted.isPlaying {
+                musicMuted.play()
+            }
+            musicMuted.setVolume(muted ? 100 : 0, fadeDuration: 2)
+        }
     }
 }
 
@@ -91,6 +108,8 @@ class IntroScene: SKScene {
     let highScoreLabel: SKLabelNode
     let resetButton: SKLabelNode
     let background: Background
+    
+    weak var musicDelegate: MusicDelegate?
     
     override init() {
         gameScene = GameScene()
@@ -108,9 +127,7 @@ class IntroScene: SKScene {
     }
     
     override func didMove(to view: SKView) {
-        if let view = view as? GameView {
-            view.toggleMusic(muted: true)
-        }
+        musicDelegate?.toggleMusic(muted: true)
         
         addChild(background)
         addChild(titleLabel)
@@ -198,6 +215,7 @@ class IntroScene: SKScene {
             let transition = SKTransition.crossFade(withDuration: 2)
             transition.pausesOutgoingScene = false
             transition.pausesIncomingScene = false
+            gameScene.musicDelegate = musicDelegate
             self.view?.presentScene(gameScene, transition: transition)
         }
     }
@@ -229,7 +247,7 @@ class GameScene: SKScene {
         didSet {
             if score % 20 == 0 {
                 extraSpeed += 0.1
-                alertText.text = "Score: \(score). Speeding up!"
+                alertText.text = "Score: \(score) - speeding up!"
                 alertText.run(textFadeSequence)
             }
         }
@@ -261,6 +279,8 @@ class GameScene: SKScene {
             action(forKey: "blockGeneration")?.speed = 1 + extraSpeed
         }
     }
+    
+    weak var musicDelegate: MusicDelegate?
     
     override init() {
         player = RotationLayer()
@@ -315,9 +335,7 @@ class GameScene: SKScene {
     }
     
     override func didMove(to view: SKView) {
-        if let view = view as? GameView {
-            view.toggleMusic(muted: false)
-        }
+        musicDelegate?.toggleMusic(muted: false)
         
         for background in backgrounds {
             addChild(background)
@@ -411,8 +429,9 @@ extension GameScene: SKPhysicsContactDelegate {
             let scoreSequence = SKAction.sequence([wait, textFadeSequence])
             scoreText.run(scoreSequence, completion: {
                 self.run(SKAction.fadeOut(withDuration: 1), completion: {
-                    let introScene = IntroScene()
-                    self.view?.presentScene(introScene)
+                    let intro = IntroScene()
+                    intro.musicDelegate = self.musicDelegate
+                    self.view?.presentScene(intro)
                 })
             })
         }
@@ -450,7 +469,6 @@ class Block: SKSpriteNode {
         let removeBlock = SKAction.removeFromParent()
         return SKAction.sequence([moveLeft, removeBlock])
     }()
-    static var hideBlocks: Bool = false
     var survived: Bool
     
     init() {
@@ -460,27 +478,23 @@ class Block: SKSpriteNode {
         survived = false
         super.init(texture: nil, color: color, size: blockSize)
         
-        if !Block.hideBlocks {
-            let xPos: CGFloat = windowSize.width + (blockSize.width / 2)
-            let yPos: CGFloat
-            let useSecondaryHeight = Bool.random()
-            if !useSecondaryHeight {
-                yPos = blockSize.height * 1.5
-            } else {
-                yPos = windowSize.height - (2 * blockSize.height) + (blockSize.height / 2)
-            }
-            position = CGPoint(x: xPos, y: yPos)
-            zPosition = Layer.block.rawValue
-            
-            physicsBody = SKPhysicsBody(rectangleOf: blockSize)
-            physicsBody?.isDynamic = true
-            physicsBody?.categoryBitMask = PhysicsCategory.block
-            physicsBody?.contactTestBitMask = PhysicsCategory.dot
-            physicsBody?.collisionBitMask = PhysicsCategory.none
-            physicsBody?.usesPreciseCollisionDetection = true
+        let xPos: CGFloat = windowSize.width + (blockSize.width / 2)
+        let yPos: CGFloat
+        let useSecondaryHeight = Bool.random()
+        if !useSecondaryHeight {
+            yPos = blockSize.height * 1.5
         } else {
-            isHidden = true
+            yPos = windowSize.height - (2 * blockSize.height) + (blockSize.height / 2)
         }
+        position = CGPoint(x: xPos, y: yPos)
+        zPosition = Layer.block.rawValue
+        
+        physicsBody = SKPhysicsBody(rectangleOf: blockSize)
+        physicsBody?.isDynamic = true
+        physicsBody?.categoryBitMask = PhysicsCategory.block
+        physicsBody?.contactTestBitMask = PhysicsCategory.dot
+        physicsBody?.collisionBitMask = PhysicsCategory.none
+        physicsBody?.usesPreciseCollisionDetection = true
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -501,7 +515,7 @@ class RotationLayer: SKShapeNode {
     var distanceFromAnchor: CGFloat = GameView.settings.dotDistanceFromAnchor
     
     override init() {
-        let anchorDotPosition = CGPoint(x: -GameView.settings.dotRadius, y: -GameView.settings.dotRadius)
+        let anchorDotPosition = CGPoint.zero
         anchorDot = Dot(color: .white, position: anchorDotPosition)
         extraSpeed = 0
         
@@ -557,7 +571,8 @@ class Dot: SKShapeNode {
         self.position = position
         let radius = GameView.settings.dotRadius
         let diameter = radius * 2
-        path = CGPath(ellipseIn: CGRect(origin: .zero, size: CGSize(width: diameter, height: diameter)), transform: nil)
+        let origin = CGPoint(x: -radius, y: -radius)
+        path = CGPath(ellipseIn: CGRect(origin: origin, size: CGSize(width: diameter, height: diameter)), transform: nil)
         strokeColor = color
         fillColor = color
         zPosition = Layer.player.rawValue
