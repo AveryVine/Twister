@@ -11,13 +11,13 @@ struct Settings {
     let secondsPerRotation: Double
     let colors: [UIColor]
     
-    init(width: CGFloat = 500, height: CGFloat = 300, numberOfDots: Int = 2, secondsPerRotation: Double = 1.75) {
-        self.windowSize = CGSize(width: width, height: height)
-        self.dotRadius = height * 0.015
-        self.dotDistanceFromAnchor = height * 0.25
+    init(windowWidth: CGFloat = 500, windowHeight: CGFloat = 300, numberOfDots: Int = 2, initialSecondsPerRotation: Double = 1.75) {
+        self.windowSize = CGSize(width: windowWidth, height: windowHeight)
+        self.dotRadius = windowHeight * 0.015
+        self.dotDistanceFromAnchor = windowHeight * 0.25
         self.numberOfDots = numberOfDots
-        self.secondsPerRotation = secondsPerRotation
-        self.blockSize = CGSize(width: self.dotRadius * 2, height: height / 5)
+        self.secondsPerRotation = initialSecondsPerRotation
+        self.blockSize = CGSize(width: self.dotRadius * 2, height: windowHeight / 5)
         
         colors = [.red, .blue, .green, .purple, .cyan, .magenta, .yellow]
     }
@@ -47,7 +47,7 @@ class GameView: SKView {
         }
         
         super.init(frame: CGRect(origin: .zero, size: GameView.settings.windowSize))
-        showsFPS = true
+        showsFPS = false
         showsNodeCount = false
         showsPhysics = false
         ignoresSiblingOrder = true
@@ -213,7 +213,7 @@ class GameScene: SKScene {
         let showText = SKAction.fadeAlpha(to: 1, duration: 0.75)
         let hideText = SKAction.fadeAlpha(to: 0, duration: 0.75)
         let scaleUpText = SKAction.scale(by: 1.3, duration: 3)
-        let scaleDownText = SKAction.scale(by: 10 / 12, duration: 0)
+        let scaleDownText = SKAction.scale(by: 4 / 5, duration: 0)
         let textFadeSequence = SKAction.sequence([showText, wait, hideText])
         let textActionGroup = SKAction.group([textFadeSequence, scaleUpText])
         let textActionSequence = SKAction.sequence([textActionGroup, scaleDownText])
@@ -221,7 +221,8 @@ class GameScene: SKScene {
     }()
     let fadeOut: SKAction = SKAction.fadeOut(withDuration: 0.5)
     let wait = SKAction.wait(forDuration: 0.5)
-    let startEasingPlayerScore = 50
+    let increaseGameSpeedThreshhold = 20
+    let increasePlayerVerticalMovementThreshhold = 50
     
     let player: RotationLayer
     var reservedBlocks: SKNode
@@ -230,13 +231,19 @@ class GameScene: SKScene {
     let scoreText: SKLabelNode
     var score: Int {
         didSet {
-            if score % 20 == 0 {
-                extraSpeed += 0.1
+            if score % increaseGameSpeedThreshhold == 0 {
+                extraSpeed += 0.12
                 alertText.text = "Score: \(score) - speeding up!"
                 alertText.run(textFadeSequence)
             }
-            if score == startEasingPlayerScore {
-                player.action(forKey: "easeUpEaseDown")?.speed = 1
+            if score % increasePlayerVerticalMovementThreshhold == 0 {
+                player.action(forKey: "easeUpEaseDown")?.speed += 0.8
+                if score / increasePlayerVerticalMovementThreshhold == 1 {
+                    alertText.text = "Not bad... time for some up and down!"
+                } else {
+                    alertText.text = "Still going? Let's bounce faster!"
+                }
+                alertText.run(textFadeSequence)
             }
         }
     }
@@ -315,7 +322,7 @@ class GameScene: SKScene {
         score = 0
         extraSpeed = 0
         
-        super.init(size: settings.windowSize)
+        super.init(size: GameView.settings.windowSize)
         scaleMode = .aspectFit
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
@@ -364,9 +371,10 @@ class GameScene: SKScene {
     }
     
     func animateBlockGeneration() {
+        let waitDuration = (GameView.settings.secondsPerRotation / 4) * Double(GameView.settings.numberOfDots)
         let add = SKAction.run(addBlock)
         let spawn = SKAction.run(spawnBlock)
-        let wait = SKAction.wait(forDuration: GameView.settings.secondsPerRotation / 2)
+        let wait = SKAction.wait(forDuration: waitDuration)
         let generateSequence = SKAction.sequence([add, spawn, wait])
         let generateLoop = SKAction.repeatForever(generateSequence)
         let initialWait = SKAction.wait(forDuration: GameView.settings.secondsPerRotation * 2.15)
@@ -397,7 +405,7 @@ extension GameScene: SKPhysicsContactDelegate {
         if gameActive {
             gameActive = false
             player.action(forKey: player.isClockwiseRotation ? "clockwise" : "counterclockwise")?.speed = 0.25
-            if score >= startEasingPlayerScore {
+            if score >= increasePlayerVerticalMovementThreshhold {
                 player.action(forKey: "easeUpEaseDown")?.speed = 0.25
             }
             for background in backgrounds {
@@ -512,7 +520,7 @@ class RotationLayer: SKShapeNode {
         
         outerDots = [Dot]()
         for index in 0 ..< GameView.settings.numberOfDots {
-            let angle = CGFloat.pi * CGFloat(2 / GameView.settings.numberOfDots * index)
+            let angle = CGFloat.pi * CGFloat(2) / CGFloat(GameView.settings.numberOfDots) * CGFloat(index)
             let xPos = distanceFromAnchor * sin(angle)
             let yPos = distanceFromAnchor * cos(angle)
             let outerDotPosition = CGPoint(x: xPos + anchorDotPosition.x, y: yPos + anchorDotPosition.y)
@@ -535,8 +543,9 @@ class RotationLayer: SKShapeNode {
     }
     
     func animate() {
-        let clockwiseRotation = SKAction.repeatForever(SKAction.rotate(byAngle: -CGFloat.pi * 2, duration: GameView.settings.secondsPerRotation))
-        let counterclockwiseRotation = SKAction.repeatForever(SKAction.rotate(byAngle: CGFloat.pi * 2, duration: GameView.settings.secondsPerRotation))
+        let rotationDuration = (GameView.settings.secondsPerRotation / 2) * Double(GameView.settings.numberOfDots)
+        let clockwiseRotation = SKAction.repeatForever(SKAction.rotate(byAngle: -CGFloat.pi * 2, duration: rotationDuration))
+        let counterclockwiseRotation = SKAction.repeatForever(SKAction.rotate(byAngle: CGFloat.pi * 2, duration: rotationDuration))
         run(clockwiseRotation, withKey: "clockwise")
         run(counterclockwiseRotation, withKey: "counterclockwise")
         
@@ -588,6 +597,7 @@ class Dot: SKShapeNode {
     }
 }
 
-let settings = Settings(width: 500, height: 300, numberOfDots: 2)
-PlaygroundPage.current.liveView = GameView(settings: settings)
-PlaygroundPage.current.needsIndefiniteExecution = true
+//let settings: Settings? = Settings(numberOfDots: 3, initialSecondsPerRotation: 3)
+let settings: Settings? = nil
+let gameView = GameView(settings: settings)
+PlaygroundPage.current.liveView = gameView
