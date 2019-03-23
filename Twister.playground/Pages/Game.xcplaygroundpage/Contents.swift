@@ -221,6 +221,7 @@ class GameScene: SKScene {
     }()
     let fadeOut: SKAction = SKAction.fadeOut(withDuration: 0.5)
     let wait = SKAction.wait(forDuration: 0.5)
+    let startEasingPlayerScore = 50
     
     let player: RotationLayer
     var reservedBlocks: SKNode
@@ -234,11 +235,13 @@ class GameScene: SKScene {
                 alertText.text = "Score: \(score) - speeding up!"
                 alertText.run(textFadeSequence)
             }
+            if score == startEasingPlayerScore {
+                player.action(forKey: "easeUpEaseDown")?.speed = 1
+            }
         }
     }
     var extraSpeed: CGFloat {
         didSet {
-            player.extraSpeed = extraSpeed
             if player.isClockwiseRotation {
                 player.action(forKey: "clockwise")?.speed = 1 + extraSpeed
             } else {
@@ -394,6 +397,9 @@ extension GameScene: SKPhysicsContactDelegate {
         if gameActive {
             gameActive = false
             player.action(forKey: player.isClockwiseRotation ? "clockwise" : "counterclockwise")?.speed = 0.25
+            if score >= startEasingPlayerScore {
+                player.action(forKey: "easeUpEaseDown")?.speed = 0.25
+            }
             for background in backgrounds {
                 background.action(forKey: "backgroundMovement")?.speed = 0.25
             }
@@ -497,14 +503,12 @@ class Block: SKSpriteNode {
 class RotationLayer: SKShapeNode {
     let anchorDot: Dot
     var outerDots: [Dot]
-    var extraSpeed: CGFloat
     var isClockwiseRotation: Bool = true
     var distanceFromAnchor: CGFloat = GameView.settings.dotDistanceFromAnchor
     
     override init() {
         let anchorDotPosition = CGPoint.zero
         anchorDot = Dot(color: .white, position: anchorDotPosition)
-        extraSpeed = 0
         
         outerDots = [Dot]()
         for index in 0 ..< GameView.settings.numberOfDots {
@@ -536,11 +540,22 @@ class RotationLayer: SKShapeNode {
         run(clockwiseRotation, withKey: "clockwise")
         run(counterclockwiseRotation, withKey: "counterclockwise")
         
+        let centerY = position.y
+        let dy = GameView.settings.windowSize.height / 20
+        
+        let easeUp = SKAction.moveTo(y: centerY + dy, duration: 2)
+        let easeDown = SKAction.moveTo(y: centerY - dy, duration: 2)
+        easeUp.timingMode = .easeInEaseOut
+        easeDown.timingMode = .easeInEaseOut
+        let easeSequence = SKAction.sequence([easeUp, easeDown])
+        run(SKAction.repeatForever(easeSequence), withKey: "easeUpEaseDown")
+        
         let moveInFromLeft = SKAction.move(to: CGPoint(x: GameView.settings.windowSize.width / 5, y: GameView.settings.windowSize.height / 2), duration: 4)
         moveInFromLeft.timingMode = .easeOut
         run(moveInFromLeft)
         
         action(forKey: "counterclockwise")?.speed = 0
+        action(forKey: "easeUpEaseDown")?.speed = 0
     }
     
     required init?(coder aDecoder: NSCoder) {
