@@ -7,17 +7,19 @@ class GameScene: SKScene {
     
     let player: Player
     var backgrounds: [Background]
+    var trails: [SKEmitterNode]
     let alertText: SKLabelNode
     let scoreText: SKLabelNode
     
     var gameActive: Bool = false
     let increaseGameSpeedThreshhold = 20
     let increasePlayerVerticalMovementThreshhold = 50
+    let moveBlocksThreshhold = 70
     
     var score: Int = 0 {
         didSet {
             if score % increaseGameSpeedThreshhold == 0 {
-                extraSpeed += 0.12
+                extraSpeed += 0.1
                 alertText.text = "Score: \(score) - speeding up!"
                 alertText.run(textFadeSequence)
             }
@@ -28,6 +30,10 @@ class GameScene: SKScene {
                 } else {
                     alertText.text = "Still going? Let's bounce faster!"
                 }
+                alertText.run(textFadeSequence)
+            }
+            if score == moveBlocksThreshhold {
+                alertText.text = "Watch out for moving blocks!"
                 alertText.run(textFadeSequence)
             }
         }
@@ -64,6 +70,13 @@ class GameScene: SKScene {
         for index in 0 ... 1 {
             let background = Background(index: index)
             backgrounds.append(background)
+        }
+        trails = [SKEmitterNode]()
+        for _ in 0 ..< GameView.settings.numberOfDots {
+            if let trail = SKEmitterNode(fileNamed: "trail") {
+                trail.position = CGPoint(x: -50, y: -50)
+                trails.append(trail)
+            }
         }
         
         alertText = {
@@ -111,6 +124,12 @@ class GameScene: SKScene {
     override func didMove(to view: SKView) {
         musicDelegate?.toggleMusic(muted: false)
         
+        let cameraNode = SKCameraNode()
+        cameraNode.position = CGPoint(x: GameView.settings.windowSize.width / 2,
+                                      y: GameView.settings.windowSize.height / 2)
+        addChild(cameraNode)
+        camera = cameraNode
+        
         for background in backgrounds {
             addChild(background)
         }
@@ -118,6 +137,11 @@ class GameScene: SKScene {
         addChild(scoreText)
         addChild(alertText)
         gameActive = true
+        
+        for trail in trails {
+            trail.targetNode = self
+            addChild(trail)
+        }
     }
     
     override func update(_ currentTime: TimeInterval) {
@@ -131,6 +155,9 @@ class GameScene: SKScene {
                 }
             }
         }
+        for (dot, trail) in zip(player.outerDots, trails) {
+            trail.position = player.convert(dot.position, to: self)
+        }
     }
     
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -140,7 +167,7 @@ class GameScene: SKScene {
     }
     
     func addBlock() {
-        let block = Block()
+        let block = Block(allowSecondaryHeights: (score > moveBlocksThreshhold))
         addChild(block)
         block.animate(withSpeed: 1 + extraSpeed)
     }
@@ -188,6 +215,9 @@ extension GameScene: SKPhysicsContactDelegate {
         if gameActive {
             gameActive = false
             player.adjustSpeed(to: 0.25, includeVertical: (score >= increasePlayerVerticalMovementThreshhold))
+            for trail in trails {
+                trail.speed = 0.25
+            }
             for background in backgrounds {
                 background.adjustSpeed(to: 0.25)
             }
@@ -197,6 +227,21 @@ extension GameScene: SKPhysicsContactDelegate {
                 }
             }
             adjustSpeed(to: 0)
+            
+            if let dot = contact.bodyA.node as? Dot ?? contact.bodyB.node as? Dot {
+                dot.fillColor = .red
+            }
+            
+            if let block = contact.bodyA.node as? Block ?? contact.bodyB.node as? Block {
+                block.color = .white
+            }
+            
+            let moveCamera = SKAction.moveBy(x: -GameView.settings.windowSize.width * 0.2, y: 0, duration: 5)
+            let zoomCamera = SKAction.scale(to: 0.6, duration: 5)
+            let cameraSequence = SKAction.group([moveCamera, zoomCamera])
+            cameraSequence.timingMode = .easeIn
+            camera?.run(cameraSequence)
+            
             showScoreAndTransition()
         }
     }
