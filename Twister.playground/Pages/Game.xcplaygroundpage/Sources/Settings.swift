@@ -23,9 +23,10 @@ public struct Settings {
 
 enum Layer: CGFloat {
     case background = 0
-    case player = 1
-    case block = 2
-    case text = 3
+    case particles = 10
+    case player = 20
+    case block = 30
+    case text = 40
 }
 
 enum PhysicsCategory {

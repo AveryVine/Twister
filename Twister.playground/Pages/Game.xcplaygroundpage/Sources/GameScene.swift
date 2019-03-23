@@ -67,7 +67,7 @@ class GameScene: SKScene {
     override init() {
         player = Player()
         backgrounds = [Background]()
-        for index in 0 ... 1 {
+        for index in 0 ..< 2 {
             let background = Background(index: index)
             backgrounds.append(background)
         }
@@ -75,6 +75,7 @@ class GameScene: SKScene {
         for _ in 0 ..< GameView.settings.numberOfDots {
             if let trail = SKEmitterNode(fileNamed: "trail") {
                 trail.position = CGPoint(x: -50, y: -50)
+                trail.zPosition = Layer.particles.rawValue
                 trails.append(trail)
             }
         }
@@ -124,9 +125,12 @@ class GameScene: SKScene {
     override func didMove(to view: SKView) {
         musicDelegate?.toggleMusic(muted: false)
         
+        let windowSize = GameView.settings.windowSize
+        let center = CGPoint(x: windowSize.width / 2,
+                             y: windowSize.height / 2)
+        
         let cameraNode = SKCameraNode()
-        cameraNode.position = CGPoint(x: GameView.settings.windowSize.width / 2,
-                                      y: GameView.settings.windowSize.height / 2)
+        cameraNode.position = center
         addChild(cameraNode)
         camera = cameraNode
         
