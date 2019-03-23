@@ -80,7 +80,7 @@ class GameScene: SKScene {
         }
         
         alertText = {
-            let alert = SKLabelNode(fontNamed: "Chalkboard SE")
+            let alert = SKLabelNode(fontNamed: "Arial Rounded MT Bold")
             alert.fontSize = 14
             alert.horizontalAlignmentMode = .center
             alert.position = {
@@ -95,7 +95,7 @@ class GameScene: SKScene {
         }()
         
         scoreText = {
-            let score = SKLabelNode(fontNamed: "Chalkboard SE")
+            let score = SKLabelNode(fontNamed: "Arial Rounded MT Bold")
             score.text = "Blocks cleared: "
             score.fontSize = 14
             score.horizontalAlignmentMode = .center

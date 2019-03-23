@@ -15,9 +15,9 @@ class IntroScene: SKScene {
     override init() {
         gameScene = GameScene()
         titleLabel = SKLabelNode(fontNamed: "Academy Engraved LET")
-        subtitleLabel = SKLabelNode(fontNamed: "Chalkboard SE")
-        highScoreLabel = SKLabelNode(fontNamed: "Chalkboard SE")
-        resetButton = SKLabelNode(fontNamed: "Chalkboard SE")
+        subtitleLabel = SKLabelNode(fontNamed: "Arial Rounded MT Bold")
+        highScoreLabel = SKLabelNode(fontNamed: "Arial Rounded MT Bold")
+        resetButton = SKLabelNode(fontNamed: "Arial Rounded MT Bold")
         background = Background()
         super.init(size: GameView.settings.windowSize)
         prepareTitleLabel()
@@ -46,7 +46,7 @@ class IntroScene: SKScene {
     
     func prepareTitleLabel() {
         titleLabel.text = "Twister"
-        titleLabel.fontSize = 42
+        titleLabel.fontSize = 48
         titleLabel.horizontalAlignmentMode = .center
         titleLabel.position = {
             let windowSize = GameView.settings.windowSize
