@@ -1,5 +1,5 @@
 /*:
- ![Title Image](title.jpg)
+ ![Twister](title.png)
  [▶️ Play Now!](@next)
  
  ---
@@ -22,9 +22,9 @@
  ![Tap to rotate!](tap_to_rotate.gif)
  There is a unique trait to these blocks: they never come in pairs. This means, with careful timing, you can swap your direction of rotation (by tapping the screen), and swerve right between them!
  
- ### Need for Speed! 💨
- ![The game speeds up!](speeding_up.gif)
- Watch out! Each time you get past enough blocks, the blocks will get *A N G R I E R*, and will speed up! If that wasn't enough, once you clear a certain number of blocks, you'll start to bounce up and down, for extra confusion!
+ ### Speed, Deception, and More! 💨
+ ![The game gets harder!](challenges.gif)
+ Watch out! At various points throughout the game, it will become more difficult to survive. Watch out for things like your character moving up and down, blocks increasing speed, or even blocks switching to different heights at the last second!
  
  ---
  
