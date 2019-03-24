@@ -14,10 +14,8 @@ public class GameView: SKView {
     var music: AVAudioPlayer?
     var musicMuted: AVAudioPlayer?
     
-    public init(settings: Settings?) {
-        if let settings = settings {
-            GameView.settings = settings
-        }
+    public init(settings: Settings = Settings()) {
+        GameView.settings = settings
         
         super.init(frame: CGRect(origin: .zero, size: GameView.settings.windowSize))
         showsFPS = false

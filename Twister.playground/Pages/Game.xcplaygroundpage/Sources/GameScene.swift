@@ -201,6 +201,8 @@ class GameScene: SKScene {
         
         let wait = SKAction.wait(forDuration: 0.5)
         let scoreSequence = SKAction.sequence([wait, textFadeSequence])
+        let moveText = SKAction.moveBy(x: -GameView.settings.windowSize.width * 0.2, y: 0, duration: 5)
+        scoreText.run(moveText)
         scoreText.run(scoreSequence, completion: {
             let intro = IntroScene()
             intro.sceneManager = self.sceneManager

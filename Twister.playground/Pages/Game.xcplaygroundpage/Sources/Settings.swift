@@ -10,11 +10,11 @@ public struct Settings {
     let colors: [UIColor]
     
     public init(windowWidth: CGFloat = 500, windowHeight: CGFloat = 300, numberOfDots: Int = 2, initialSecondsPerRotation: Double = 1.75) {
-        self.windowSize = CGSize(width: windowWidth, height: windowHeight)
+        self.windowSize = CGSize(width: (windowWidth < 50) ? 50 : windowWidth, height: (windowHeight < 50) ? 50 : windowHeight)
         self.dotRadius = windowHeight * 0.015
         self.dotDistanceFromAnchor = windowHeight * 0.25
-        self.numberOfDots = numberOfDots
-        self.secondsPerRotation = initialSecondsPerRotation
+        self.numberOfDots = (numberOfDots < 1) ? 1 : numberOfDots
+        self.secondsPerRotation = (initialSecondsPerRotation < 0.5) ? 0.5 : initialSecondsPerRotation
         self.blockSize = CGSize(width: self.dotRadius * 2, height: windowHeight / 5)
         
         colors = [.red, .blue, .green, .purple, .cyan, .magenta, .yellow]
