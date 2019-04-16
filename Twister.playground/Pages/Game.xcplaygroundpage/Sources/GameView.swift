@@ -65,7 +65,7 @@ extension GameView: SceneManager {
 
 extension GameView: MusicDelegate {
     func toggleMusic(muted: Bool) {
-        music?.setVolume(muted ? 0 : 5, fadeDuration: 2)
-        musicMuted?.setVolume(muted ? 5 : 0, fadeDuration: 2)
+        music?.setVolume(muted ? 0 : 1, fadeDuration: 2)
+        musicMuted?.setVolume(muted ? 1 : 0, fadeDuration: 2)
     }
 }
